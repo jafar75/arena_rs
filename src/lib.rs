@@ -7,6 +7,35 @@ pub struct Arena {
     offset: usize,
 }
 
+/// A reference to a value allocated in an [`Arena`].
+///
+/// The lifetime `'arena` is tied to the arena that owns the backing memory,
+/// so the borrow checker statically prevents:
+/// - using the reference after the arena is dropped
+/// - calling [`Arena::reset`] while any `ArenaRef` is still live
+pub struct ArenaRef<'arena, T> {
+    inner: &'arena mut T,
+}
+
+impl<'arena, T> std::ops::Deref for ArenaRef<'arena, T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        self.inner
+    }
+}
+
+impl<'arena, T> std::ops::DerefMut for ArenaRef<'arena, T> {
+    fn deref_mut(&mut self) -> &mut T {
+        self.inner
+    }
+}
+
+impl<'arena, T: std::fmt::Debug> std::fmt::Debug for ArenaRef<'arena, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
 impl Arena {
     /// Create a new arena with the specified size in bytes
     pub fn new(size: usize) -> Result<Self, ArenaError> {
@@ -34,19 +63,16 @@ impl Arena {
 
     /// Allocate space for a single object of type T, initialized with `value`.
     ///
-    /// This is the safe entry point: the value is written into the arena before
-    /// a reference is returned, so the returned `&mut T` always points to
-    /// initialized memory.
-    pub fn alloc<T>(&mut self, value: T) -> Result<&mut T, ArenaError> {
+    /// Returns an [`ArenaRef`] whose lifetime is bound to the arena, so the
+    /// borrow checker prevents both use-after-drop and calling [`reset`] while
+    /// the reference is live.
+    pub fn alloc<T>(&mut self, value: T) -> Result<ArenaRef<'_, T>, ArenaError> {
         let ptr = self.alloc_layout(Layout::new::<T>())?;
 
         unsafe {
             let typed_ptr = ptr.as_ptr() as *mut T;
-            // Write the value, transferring ownership into the arena.
-            // No destructor will be called for it when the arena resets or drops
-            // (intentional — see crate docs).
             typed_ptr.write(value);
-            Ok(&mut *typed_ptr)
+            Ok(ArenaRef { inner: &mut *typed_ptr })
         }
     }
 
@@ -86,17 +112,18 @@ impl Arena {
 
     /// Allocate space for a single object of type T without initializing it.
     ///
-    /// Returns `&mut MaybeUninit<T>`. The caller **must** initialize the value
-    /// before calling `.assume_init_mut()` or reading through the reference.
+    /// Returns an [`ArenaRef`] wrapping `MaybeUninit<T>`. The caller **must**
+    /// initialize the value before calling `.assume_init_mut()` or reading
+    /// through the reference.
     ///
     /// Prefer [`alloc`] unless you have a specific performance reason to skip
     /// initialization.
-    pub fn alloc_uninit<T>(&mut self) -> Result<&mut std::mem::MaybeUninit<T>, ArenaError> {
+    pub fn alloc_uninit<T>(&mut self) -> Result<ArenaRef<'_, std::mem::MaybeUninit<T>>, ArenaError> {
         let ptr = self.alloc_layout(Layout::new::<T>())?;
 
         unsafe {
             let typed_ptr = ptr.as_ptr() as *mut std::mem::MaybeUninit<T>;
-            Ok(&mut *typed_ptr)
+            Ok(ArenaRef { inner: &mut *typed_ptr })
         }
     }
 
@@ -277,7 +304,7 @@ mod tests {
     fn test_out_of_memory() {
         let mut arena = Arena::new(8).unwrap();
         arena.alloc(0u64).unwrap();
-        assert_eq!(arena.alloc(0u64), Err(ArenaError::OutOfMemory));
+        assert!(matches!(arena.alloc(0u64), Err(ArenaError::OutOfMemory)));
     }
 
     #[test]
@@ -305,10 +332,37 @@ mod tests {
     }
 
     #[test]
+    fn test_arena_ref_deref() {
+        let mut arena = Arena::new(1024).unwrap();
+        let mut r = arena.alloc(10u32).unwrap();
+        assert_eq!(*r, 10);
+        *r = 20;
+        assert_eq!(*r, 20);
+    }
+
+    #[test]
+    fn test_arena_ref_debug() {
+        let mut arena = Arena::new(1024).unwrap();
+        let r = arena.alloc(42u32).unwrap();
+        assert_eq!(format!("{:?}", r), "42");
+    }
+
+    #[test]
+    fn test_reset_allowed_after_ref_dropped() {
+        let mut arena = Arena::new(1024).unwrap();
+        {
+            let _r = arena.alloc(1u32).unwrap();
+            // cannot call arena.reset() here — borrow checker prevents it
+        } // _r dropped here, borrow released
+        arena.reset(); // fine now
+        assert_eq!(arena.used(), 0);
+    }
+
+    #[test]
     fn test_alloc_uninit_single() {
         let mut arena = Arena::new(1024).unwrap();
 
-        let slot = arena.alloc_uninit::<u64>().unwrap();
+        let mut slot = arena.alloc_uninit::<u64>().unwrap();
         slot.write(77);
         let val = unsafe { slot.assume_init_mut() };
         assert_eq!(*val, 77);

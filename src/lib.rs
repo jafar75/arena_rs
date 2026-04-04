@@ -84,6 +84,47 @@ impl Arena {
         }
     }
 
+    /// Allocate space for a single object of type T without initializing it.
+    ///
+    /// Returns `&mut MaybeUninit<T>`. The caller **must** initialize the value
+    /// before calling `.assume_init_mut()` or reading through the reference.
+    ///
+    /// Prefer [`alloc`] unless you have a specific performance reason to skip
+    /// initialization.
+    pub fn alloc_uninit<T>(&mut self) -> Result<&mut std::mem::MaybeUninit<T>, ArenaError> {
+        let ptr = self.alloc_layout(Layout::new::<T>())?;
+
+        unsafe {
+            let typed_ptr = ptr.as_ptr() as *mut std::mem::MaybeUninit<T>;
+            Ok(&mut *typed_ptr)
+        }
+    }
+
+    /// Allocate space for an array of `count` elements without initializing them.
+    ///
+    /// Returns `&mut [MaybeUninit<T>]`. The caller **must** initialize every
+    /// element before reading from the slice.
+    ///
+    /// Prefer [`alloc_array`] unless you have a specific performance reason to
+    /// skip initialization.
+    pub fn alloc_array_uninit<T>(
+        &mut self,
+        count: usize,
+    ) -> Result<&mut [std::mem::MaybeUninit<T>], ArenaError> {
+        if count == 0 {
+            return Ok(&mut []);
+        }
+
+        let layout = Layout::array::<T>(count)
+            .map_err(|_| ArenaError::InvalidSize)?;
+        let ptr = self.alloc_layout(layout)?;
+
+        unsafe {
+            let base = ptr.as_ptr() as *mut std::mem::MaybeUninit<T>;
+            Ok(std::slice::from_raw_parts_mut(base, count))
+        }
+    }
+
     /// Low-level allocation based on layout.
     fn alloc_layout(&mut self, layout: Layout) -> Result<NonNull<u8>, ArenaError> {
         let size = layout.size();
@@ -261,6 +302,28 @@ mod tests {
         let arena = Arena::new(512).unwrap();
         let s = format!("{:?}", arena);
         assert_eq!(s, "Arena { used: 0, capacity: 512 }");
+    }
+
+    #[test]
+    fn test_alloc_uninit_single() {
+        let mut arena = Arena::new(1024).unwrap();
+
+        let slot = arena.alloc_uninit::<u64>().unwrap();
+        slot.write(77);
+        let val = unsafe { slot.assume_init_mut() };
+        assert_eq!(*val, 77);
+    }
+
+    #[test]
+    fn test_alloc_array_uninit() {
+        let mut arena = Arena::new(1024).unwrap();
+
+        let slots = arena.alloc_array_uninit::<u32>(4).unwrap();
+        for (i, slot) in slots.iter_mut().enumerate() {
+            slot.write(i as u32 * 10);
+        }
+        let vals: &[u32] = unsafe { std::mem::transmute(&*slots) };
+        assert_eq!(vals, [0, 10, 20, 30]);
     }
 
     #[test]

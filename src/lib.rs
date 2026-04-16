@@ -1,6 +1,9 @@
 use std::alloc::{self, Layout};
 use std::ptr::NonNull;
 
+pub mod typed_arena;
+pub use typed_arena::TypedArena;
+
 pub struct Arena {
     memory: NonNull<u8>,
     size: usize,

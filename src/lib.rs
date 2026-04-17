@@ -1,5 +1,12 @@
-use std::alloc::{self, Layout};
-use std::ptr::NonNull;
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(feature = "std")]
+extern crate std;
+
+use alloc::alloc::{self as allocator, Layout};
+use core::ptr::NonNull;
 
 pub mod typed_arena;
 pub use typed_arena::TypedArena;
@@ -20,21 +27,21 @@ pub struct ArenaRef<'arena, T> {
     inner: &'arena mut T,
 }
 
-impl<'arena, T> std::ops::Deref for ArenaRef<'arena, T> {
+impl<'arena, T> core::ops::Deref for ArenaRef<'arena, T> {
     type Target = T;
     fn deref(&self) -> &T {
         self.inner
     }
 }
 
-impl<'arena, T> std::ops::DerefMut for ArenaRef<'arena, T> {
+impl<'arena, T> core::ops::DerefMut for ArenaRef<'arena, T> {
     fn deref_mut(&mut self) -> &mut T {
         self.inner
     }
 }
 
-impl<'arena, T: std::fmt::Debug> std::fmt::Debug for ArenaRef<'arena, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<'arena, T: core::fmt::Debug> core::fmt::Debug for ArenaRef<'arena, T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         self.inner.fmt(f)
     }
 }
@@ -50,7 +57,7 @@ impl Arena {
             .map_err(|_| ArenaError::InvalidAlignment)?;
 
         let memory = unsafe {
-            let ptr = alloc::alloc(layout);
+            let ptr = allocator::alloc(layout);
             if ptr.is_null() {
                 return Err(ArenaError::AllocationFailed);
             }
@@ -109,7 +116,7 @@ impl Arena {
             for i in 0..count {
                 base.add(i).write(init(i));
             }
-            Ok(std::slice::from_raw_parts_mut(base, count))
+            Ok(core::slice::from_raw_parts_mut(base, count))
         }
     }
 
@@ -121,11 +128,11 @@ impl Arena {
     ///
     /// Prefer [`alloc`] unless you have a specific performance reason to skip
     /// initialization.
-    pub fn alloc_uninit<T>(&mut self) -> Result<ArenaRef<'_, std::mem::MaybeUninit<T>>, ArenaError> {
+    pub fn alloc_uninit<T>(&mut self) -> Result<ArenaRef<'_, core::mem::MaybeUninit<T>>, ArenaError> {
         let ptr = self.alloc_layout(Layout::new::<T>())?;
 
         unsafe {
-            let typed_ptr = ptr.as_ptr() as *mut std::mem::MaybeUninit<T>;
+            let typed_ptr = ptr.as_ptr() as *mut core::mem::MaybeUninit<T>;
             Ok(ArenaRef { inner: &mut *typed_ptr })
         }
     }
@@ -140,7 +147,7 @@ impl Arena {
     pub fn alloc_array_uninit<T>(
         &mut self,
         count: usize,
-    ) -> Result<&mut [std::mem::MaybeUninit<T>], ArenaError> {
+    ) -> Result<&mut [core::mem::MaybeUninit<T>], ArenaError> {
         if count == 0 {
             return Ok(&mut []);
         }
@@ -150,8 +157,8 @@ impl Arena {
         let ptr = self.alloc_layout(layout)?;
 
         unsafe {
-            let base = ptr.as_ptr() as *mut std::mem::MaybeUninit<T>;
-            Ok(std::slice::from_raw_parts_mut(base, count))
+            let base = ptr.as_ptr() as *mut core::mem::MaybeUninit<T>;
+            Ok(core::slice::from_raw_parts_mut(base, count))
         }
     }
 
@@ -200,8 +207,8 @@ impl Arena {
     }
 }
 
-impl std::fmt::Debug for Arena {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for Arena {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "Arena {{ used: {}, capacity: {} }}", self.used(), self.capacity())
     }
 }
@@ -210,7 +217,7 @@ impl Drop for Arena {
     fn drop(&mut self) {
         unsafe {
             let layout = Layout::from_size_align_unchecked(self.size, 8);
-            alloc::dealloc(self.memory.as_ptr(), layout);
+            allocator::dealloc(self.memory.as_ptr(), layout);
         }
     }
 }
@@ -223,8 +230,8 @@ pub enum ArenaError {
     OutOfMemory,
 }
 
-impl std::fmt::Display for ArenaError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for ArenaError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             ArenaError::InvalidSize => write!(f, "Invalid size specified"),
             ArenaError::InvalidAlignment => write!(f, "Invalid alignment"),
@@ -234,11 +241,13 @@ impl std::fmt::Display for ArenaError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for ArenaError {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::format;
 
     #[derive(Debug, Clone, Copy, PartialEq)]
     struct Point {
@@ -286,7 +295,7 @@ mod tests {
             assert_eq!(v, i as u64);
         }
 
-        println!("{:?}", arena);
+
     }
 
     #[test]
@@ -379,7 +388,7 @@ mod tests {
         for (i, slot) in slots.iter_mut().enumerate() {
             slot.write(i as u32 * 10);
         }
-        let vals: &[u32] = unsafe { std::mem::transmute(&*slots) };
+        let vals: &[u32] = unsafe { core::mem::transmute(&*slots) };
         assert_eq!(vals, [0, 10, 20, 30]);
     }
 

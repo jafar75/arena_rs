@@ -3,6 +3,10 @@ name = "arena_rs"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["std"]
+std = []
+
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
 

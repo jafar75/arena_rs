@@ -1,5 +1,5 @@
-use std::alloc::{self, Layout};
-use std::ptr::{self, NonNull};
+use alloc::alloc::{self as allocator, Layout};
+use core::ptr::{self, NonNull};
 
 use crate::ArenaError;
 
@@ -44,7 +44,7 @@ impl<T> TypedArena<T> {
             .map_err(|_| ArenaError::InvalidSize)?;
 
         let memory = unsafe {
-            let ptr = alloc::alloc(layout) as *mut T;
+            let ptr = allocator::alloc(layout) as *mut T;
             if ptr.is_null() {
                 return Err(ArenaError::AllocationFailed);
             }
@@ -112,8 +112,8 @@ impl<T> TypedArena<T> {
     }
 }
 
-impl<T: std::fmt::Debug> std::fmt::Debug for TypedArena<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: core::fmt::Debug> core::fmt::Debug for TypedArena<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
             "TypedArena {{ len: {}, capacity: {} }}",
@@ -132,7 +132,7 @@ impl<T> Drop for TypedArena<T> {
             if self.capacity > 0 {
                 let layout = Layout::array::<T>(self.capacity)
                     .expect("layout valid: same params used in new()");
-                alloc::dealloc(self.memory.as_ptr() as *mut u8, layout);
+                allocator::dealloc(self.memory.as_ptr() as *mut u8, layout);
             }
         }
     }
@@ -141,8 +141,10 @@ impl<T> Drop for TypedArena<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
+    use alloc::string::{String, ToString};
+    use alloc::format;
+    use core::sync::atomic::{AtomicUsize, Ordering};
+    use alloc::sync::Arc;
 
     // Counts how many instances are currently live via a shared atomic.
     #[derive(Debug)]

@@ -2,6 +2,12 @@
 name = "arena_rs"
 version = "0.1.0"
 edition = "2024"
+description = "A simple, safe, no_std arena allocator with bump-pointer allocation and optional Drop support"
+license = "MIT"
+repository = "https://github.com/jafar75/arena_rs"
+keywords = ["arena", "allocator", "memory", "no-std", "bump"]
+categories = ["memory-management", "no-std"]
+readme = "README.md"
 
 [features]
 default = ["std"]

@@ -1,6 +1,6 @@
-# arena_rs
+# arenars
 
-`arena_rs` is a simple and safe arena-based memory allocator written in Rust.
+`arenars` is a simple and safe arena-based memory allocator written in Rust.
 
 A fixed-size buffer is allocated up front, and objects are placed into it linearly via a bump pointer. All allocated objects are cleared at once via a `reset()` call — highly efficient for batch-style workloads where you don't need to free objects individually.
 
@@ -36,7 +36,7 @@ Inspired by the book [`C++ Memory Management`](https://www.amazon.com/Memory-Man
 ### `Arena` — fast bump allocator
 
 ```rust
-use arena_rs::Arena;
+use arenars::Arena;
 
 let mut arena = Arena::new(1024).unwrap(); // 1 KB buffer
 
@@ -54,7 +54,7 @@ arena.reset(); // O(1) — no destructors run
 ### `TypedArena<T>` — arena with `Drop` support
 
 ```rust
-use arena_rs::TypedArena;
+use arenars::TypedArena;
 
 let mut arena = TypedArena::<String>::new(16).unwrap();
 
@@ -70,7 +70,7 @@ arena.reset(); // drop_in_place called on every live String — no leaks
 types in one arena — each variant's `Drop` is called correctly on reset:
 
 ```rust
-use arena_rs::TypedArena;
+use arenars::TypedArena;
 
 enum GameObject {
     Player(String),
@@ -87,7 +87,7 @@ arena.reset(); // drops all variants correctly
 ### Uninitialized allocation (advanced)
 
 ```rust
-use arena_rs::Arena;
+use arenars::Arena;
 
 let mut arena = Arena::new(64).unwrap();
 

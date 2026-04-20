@@ -14,7 +14,7 @@ use crate::ArenaError;
 ///
 /// # Example
 /// ```
-/// use arena_rs::TypedArena;
+/// use arenars::TypedArena;
 ///
 /// let mut arena = TypedArena::<String>::new(16).unwrap();
 ///

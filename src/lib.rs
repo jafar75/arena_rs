@@ -93,7 +93,7 @@ impl Arena {
     /// other logic) without requiring `T: Clone` or `T: Default`.
     ///
     /// ```
-    /// # use arena_rs::Arena;
+    /// # use arenars::Arena;
     /// let mut arena = Arena::new(256).unwrap();
     /// let squares = arena.alloc_array(4, |i| (i * i) as u32).unwrap();
     /// assert_eq!(squares, [0, 1, 4, 9]);
